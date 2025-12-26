@@ -20,7 +20,7 @@ PLAYER=SimpleNamespace(
         x=SCREEN_CENTER.x,
         y=SCREEN_HEIGHT-50-100
     ),
-    speed=3a,
+    speed=3,
     atk=5,
     hp=10,
     hpfull=10,
