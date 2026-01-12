@@ -177,17 +177,17 @@ class OmnidirectionalDanmaku(Barrage):
                 bullet.set_velocity(Vector2(1, 0).rotate(360 / DIV * i)*5)
                 self.bullets.append(bullet)
 
-class CircleBeamDanmaku(Barrage):
+class UzumakiDanmaku(Barrage):
 
     def __init__(self):
         super().__init__()
     def update(self): 
         super().update()
-
-        bullet =ColorBullet("blue",5)
-        bullet.set_position(Vector2(PLAYER.pos.x,PLAYER.pos.y))
-        bullet.set_velocity(Vector2(1, 0).rotate(frame_count*3)*20)
-        self.bullets.append(bullet)
+        if(frame_count%3 ==0):
+            bullet =ColorBullet("blue",5)
+            bullet.set_position(Vector2(PLAYER.pos.x,PLAYER.pos.y))
+            bullet.set_velocity(Vector2(1, 0).rotate(frame_count*3)*5)
+            self.bullets.append(bullet)
 
 class RasenDanmaku(Barrage):
     def __init__(self):
@@ -242,8 +242,17 @@ class LinearScatteredDanmaku(Barrage):
                     self.option_angle+=30
             self.bullets.extend(new_bullets)
 
-
-  
+class AimedDanmaku(Barrage):
+    def __init__(self):
+        super().__init__()
+    def update(self): 
+        super().update()
+        if(frame_count%60==0):
+            bullet = ColorBullet("purple",5)
+            bullet.set_position(Vector2(PLAYER.pos.x,PLAYER.pos.y))
+            direction = Vector2(SCREEN_CENTER.x - PLAYER.pos.x, SCREEN_CENTER.y - PLAYER.pos.y).normalize()
+            bullet.set_velocity(direction * 5)
+            self.bullets.append(bullet)
 
 def player_move(vec,isShift):
     coe=1
@@ -292,9 +301,10 @@ def main_loop():
     player_b=PlayerDanmaku()
     random_b= RandomDanmaku()
     omnidirectional_b=OmnidirectionalDanmaku()
-    beam_b=CircleBeamDanmaku()
+    beam_b=UzumakiDanmaku()
     rasen_b=RasenDanmaku()
     linearScattered_b=LinearScatteredDanmaku()
+    aimed_b=AimedDanmaku()
 
     while (1):
         screen.fill((0,0,0))       
@@ -314,6 +324,7 @@ def main_loop():
         beam_b.update()
         rasen_b.update()
         linearScattered_b.update()
+        aimed_b.update()
 
         draw_ui()
 
