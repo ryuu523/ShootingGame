@@ -20,7 +20,6 @@ player_shot_timer = 0
 
 SCREEN_CENTER = SimpleNamespace(x=SCREEN_WIDTH//2, y=SCREEN_HEIGHT//2)
 
-FPS=60
 PLAYER = SimpleNamespace(
     who="p", width=20, height=20,radius=5,
     pos=Vector2(SCREEN_CENTER.x, SCREEN_HEIGHT-150),
@@ -31,7 +30,7 @@ PLAYER = SimpleNamespace(
 VEC = SimpleNamespace(LEFT=[-1,0], RIGHT=[1,0], UP=[0,-1], DOWN=[0,1])
 
 
-
+#弾の設定
 class Bullet:
     def __init__(self):
         self.pos=Vector2(0,0)
@@ -59,7 +58,7 @@ class Bullet:
         self.velocity = velocity
         self.angle = self.velocity.as_polar()[1]
 
-class  ColorBullet(Bullet):
+class ColorBullet(Bullet):
     def __init__(self,color,radius):
         super().__init__()
         self.color=color
@@ -71,7 +70,7 @@ class  ColorBullet(Bullet):
     def draw(self):
         pygame.draw.circle(screen,self.color,(self.pos.x,self.pos.y),self.radius)
 
-class  AngVelBullet(Bullet):
+class AngVelBullet(Bullet):
     def __init__(self,color,radius):
         super().__init__()
         self.color=color
@@ -112,6 +111,23 @@ class AccelBullet(Bullet):
     def set_accel(self,accel):
         self.accel=accel
 
+class FirstStopBullet(Bullet):
+    def __init__(self,color,radius):
+        super().__init__()
+        self.color=color
+        self.radius=radius
+        self.stop_frame=0
+
+    def draw(self):
+        pygame.draw.circle(screen,self.color,(self.pos.x,self.pos.y),self.radius)
+    def update(self):
+        if(frame_count>=self.stop_frame):
+            return super().update()
+        self.draw()
+    def set_stop_frame(self,stop_frame):
+        self.stop_frame=stop_frame
+
+#弾幕の設定
 class Barrage:
     def __init__(self) :
         self.bullets = []
@@ -181,7 +197,10 @@ class RasenDanmaku(Barrage):
         if(frame_count%200==0):
             for i in range(2):
                 bullet = AngVelBullet("cyan",10)
-                bullet.set_position(Vector2(PLAYER.pos.x,PLAYER.pos.y))
+                if(i==0):
+                    bullet.set_position(Vector2(PLAYER.pos.x+30,PLAYER.pos.y))
+                else:
+                    bullet.set_position(Vector2(PLAYER.pos.x-30,PLAYER.pos.y))
                 bullet.set_velocity(Vector2(1, 0).rotate(180*i)*0.5)
                 bullet.set_spiral(1.5,1.01)
                 self.bullets.append(bullet)
@@ -196,6 +215,33 @@ class RasenDanmaku(Barrage):
                     bullet.set_accel(0.01)
                     new_bullets.append(bullet)
             self.bullets.extend(new_bullets)
+
+class LinearScatteredDanmaku(Barrage):
+    def __init__(self):
+        super().__init__()
+        self.option_angle=0
+    def update(self): 
+        super().update()
+        start_x=random.randint(0,SCREEN_WIDTH)
+        end_x=random.randint(0,SCREEN_WIDTH)
+        angle=math.degrees(math.atan2(SCREEN_HEIGHT,(end_x-start_x)))
+        if(frame_count%400==0):
+            bullet = ColorBullet("yellow",5)
+            bullet.set_position(Vector2(start_x,0))
+            bullet.set_velocity(Vector2(1, 0).rotate(angle)*5)
+            self.bullets.append(bullet)
+        if(frame_count%4==0):
+            new_bullets = [] 
+            for option_bullet in self.bullets:
+                if isinstance(option_bullet,ColorBullet) and option_bullet.color=="yellow":
+                    bullet = FirstStopBullet("gray",5)
+                    bullet.set_position(option_bullet.get_position())
+                    bullet.set_velocity(Vector2(1, 0).rotate(self.option_angle)*2)
+                    bullet.set_stop_frame(120+frame_count)
+                    new_bullets.append(bullet)
+                    self.option_angle+=30
+            self.bullets.extend(new_bullets)
+
 
   
 
@@ -240,12 +286,15 @@ def draw_ui():
         pygame.draw.circle(screen,(100,100,255,0.5),(PLAYER.pos.x,PLAYER.pos.y),PLAYER.radius)        
     pygame.draw.rect(screen,(0,255,0),(PLAYER.pos.x-PLAYER.width//2,PLAYER.pos.y+PLAYER.height//2,PLAYER.width-(PLAYER.width/PLAYER.hpfull)*(PLAYER.hpfull-PLAYER.hp),10))
 def main_loop():
+    
     global frame_count, player_shot_timer
+
     player_b=PlayerDanmaku()
     random_b= RandomDanmaku()
     omnidirectional_b=OmnidirectionalDanmaku()
     beam_b=CircleBeamDanmaku()
     rasen_b=RasenDanmaku()
+    linearScattered_b=LinearScatteredDanmaku()
 
     while (1):
         screen.fill((0,0,0))       
@@ -264,6 +313,7 @@ def main_loop():
         omnidirectional_b.update()
         beam_b.update()
         rasen_b.update()
+        linearScattered_b.update()
 
         draw_ui()
 
