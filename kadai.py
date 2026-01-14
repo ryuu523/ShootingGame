@@ -13,6 +13,8 @@ pygame.init()
 screen = pygame.display.set_mode((SCREEN_WIDTH,SCREEN_HEIGHT))
 pygame.display.set_caption("game")
 clock = pygame.time.Clock()
+pygame.font.init()
+font = pygame.font.SysFont("arial", 24)
 
 frame_count = 0
 player_shot_timer = 0 
@@ -25,11 +27,14 @@ class Player:
         self.height = 20
         self.radius = 5  # 当たり判定用
         self.speed = 4
-        self.hp = 10
-        self.hp_max = 10
+        self.hp_max = 1
+        self.hp = self.hp_max
+        self.lives=3
         self.shot_timer = 0
         self.cooldown = 8
         self.bullet_speed = 10
+        self.is_invincible = False
+        self.invincible_timer = 0
 
     def move(self):
         pressed_key = pygame.key.get_pressed()
@@ -69,9 +74,11 @@ class Player:
         player_bullets.append(bullet)
 
     def draw(self):
-        # プレイヤー本体
-        pygame.draw.rect(screen, (255, 255, 255), 
-                         (self.pos.x - self.width//2, self.pos.y - self.height//2, self.width, self.height))
+        #無敵時点滅
+        if self.invincible_timer%4 <2:
+            # プレイヤー本体
+            pygame.draw.rect(screen, (255, 255, 255), 
+                            (self.pos.x - self.width//2, self.pos.y - self.height//2, self.width, self.height))
         # 低速時の判定表示
         pressed_key = pygame.key.get_pressed()
         if pressed_key[K_LSHIFT] or pressed_key[K_RSHIFT]:
@@ -87,25 +94,19 @@ class Enemy:
         self.barrage=barrage
 
     def update(self,target_pos):
-        # 左右にゆらゆら動く例
+        # 移動と弾幕生成
         self.pos.x += math.sin(frame_count * 0.05) * 2
-        self.pos.y += 0.5 # ゆっくり降りてくる
+        self.pos.y += 0.5 
+        self.barrage.spawn(self.pos,target_pos)
+        
         self.draw()
         
-        # 弾幕の更新
-        # 引数の数に合わせて呼び出しを分ける
-        if isinstance(self.barrage, AimedDanmaku):
-            self.barrage.update(self.pos, target_pos)
-        elif isinstance(self.barrage, LinearScatteredDanmaku):
-            self.barrage.update()
-        else:
-            self.barrage.update(self.pos)
-        return self.pos.y > SCREEN_HEIGHT + 50 or self.hp <= 0
-
+        if self.pos.y > SCREEN_HEIGHT + 50 or self.hp <= 0:
+            return True  # 画面外に出たかHP0以下で消滅
+        return False
+        
     def draw(self):
-        # 描画
         pygame.draw.circle(screen, (255, 0, 0), (int(self.pos.x), int(self.pos.y)), self.radius)
-        # HPバーの簡易表示
         pygame.draw.rect(screen, (255, 0, 0), (self.pos.x-15, self.pos.y-25, 30, 5))
         pygame.draw.rect(screen, (0, 255, 0), (self.pos.x-15, self.pos.y-25, 30 * (self.hp/3), 5))
 
@@ -187,20 +188,19 @@ class FirstStopBullet(Bullet):
 class Barrage:
     def __init__(self) :
         self.bullets = []
+        self.is_active = True
 
     def update(self):
         self.update_bullets()
 
     def update_bullets(self):
         self.bullets = [b for b in self.bullets if not b.update()]
-
+    def spawn(self,start_pos,target_pos=None):
+        pass
+    
 class RandomDanmaku(Barrage):
-    def __init__(self):
-        super().__init__()
-
-    def update(self,start_pos): 
-        super().update()
-        if(frame_count%2==1):
+    def spawn(self,start_pos,target_pos=None): 
+        if(self.is_active and frame_count%2==1):
             bullet= ColorBullet("red",5)     
             bullet.set_position(Vector2(start_pos.x,start_pos.y))
             angle = random.randint(0, 360)
@@ -210,13 +210,8 @@ class RandomDanmaku(Barrage):
             self.bullets.append(bullet)
         
 class OmnidirectionalDanmaku(Barrage):
-
-    def __init__(self):
-        super().__init__()
-    def update(self,start_pos): 
-        super().update()
-
-        if(frame_count%30 ==0):
+    def spawn(self,start_pos,target_pos=None): 
+        if(self.is_active and frame_count%30 ==0):
             DIV = 64
             for i in range(DIV):
                 bullet =ColorBullet("red",5)
@@ -225,25 +220,19 @@ class OmnidirectionalDanmaku(Barrage):
                 self.bullets.append(bullet)
 
 class UzumakiDanmaku(Barrage):
-
-    def __init__(self):
-        super().__init__()
-    def update(self,start_pos): 
-        super().update()
-        if(frame_count%3 ==0):
+    def spawn(self,start_pos,target_pos=None): 
+        if(self.is_active and frame_count%3 ==0):
             bullet =ColorBullet("red",5)
             bullet.set_position(Vector2(start_pos.x,start_pos.y))
             bullet.set_velocity(Vector2(1, 0).rotate(frame_count*3)*5)
             self.bullets.append(bullet)
 
 class RasenDanmaku(Barrage):
-    def __init__(self):
-        super().__init__()
-    def update(self,start_pos): 
-        super().update()
-        if(frame_count%200==0):
+    def spawn(self,start_pos,target_pos=None): 
+        super().spawn(start_pos)
+        if(self.is_active and frame_count%200==0):
             for i in range(2):
-                bullet = AngVelBullet("red",5)
+                bullet = AngVelBullet("red",10)
                 if(i==0):
                     bullet.set_position(Vector2(start_pos.x+30,start_pos.y))
                 else:
@@ -267,8 +256,7 @@ class LinearScatteredDanmaku(Barrage):
     def __init__(self):
         super().__init__()
         self.option_angle=0
-    def update(self): 
-        super().update()
+    def spawn(self,start_pos=None,target_pos=None): 
         start_x=random.randint(0,SCREEN_WIDTH)
         end_x=random.randint(0,SCREEN_WIDTH)
         angle=math.degrees(math.atan2(SCREEN_HEIGHT,(end_x-start_x)))
@@ -290,37 +278,13 @@ class LinearScatteredDanmaku(Barrage):
             self.bullets.extend(new_bullets)
 
 class AimedDanmaku(Barrage):
-    def __init__(self):
-        super().__init__()
-    def update(self,start_pos,target_pos): 
-        super().update()
-        if(frame_count%30==0):
+    def spawn(self,start_pos,target_pos): 
+        if(self.is_active and frame_count%30==0):
             bullet = ColorBullet("red",5)
             bullet.set_position(Vector2(start_pos.x,start_pos.y))
             direction = Vector2(target_pos.x - start_pos.x, target_pos.y - start_pos.y).normalize()
             bullet.set_velocity(direction * 5)
             self.bullets.append(bullet)
-
-def operate(player_b):
-    global player_shot_timer
-    pressed_key = pygame.key.get_pressed()
-    pressed_mouse= pygame.mouse.get_pressed()
-    isShift=pressed_key[K_LSHIFT] or pressed_key[K_RSHIFT]
-    if pressed_key[K_LEFT] or pressed_key[K_a]: player_move(VEC.LEFT,isShift)
-    if pressed_key[K_RIGHT] or pressed_key[K_d]:player_move(VEC.RIGHT,isShift)
-    if pressed_key[K_UP] or pressed_key[K_w]:   player_move(VEC.UP,isShift)
-    if pressed_key[K_DOWN] or pressed_key[K_s]: player_move(VEC.DOWN,isShift)
-    if pressed_key[K_z] or pressed_mouse[0]:
-        if player_shot_timer <= 0:
-            player_b.generate()
-            player_shot_timer=PLAYER.bullet.cooldown
-      
-def draw_ui():
-    pressed_key = pygame.key.get_pressed()
-    pygame.draw.rect(screen,(255,255,255,0.5),(PLAYER.pos.x-PLAYER.width//2,PLAYER.pos.y-PLAYER.height//2,PLAYER.width,PLAYER.height))
-    if(pressed_key[K_RSHIFT] or pressed_key[K_LSHIFT]):
-        pygame.draw.circle(screen,(100,100,255,0.5),(PLAYER.pos.x,PLAYER.pos.y),PLAYER.radius)        
-    pygame.draw.rect(screen,(0,255,0),(PLAYER.pos.x-PLAYER.width//2,PLAYER.pos.y+PLAYER.height//2,PLAYER.width-(PLAYER.width/PLAYER.hpfull)*(PLAYER.hpfull-PLAYER.hp),10))
 def collision_check(player,player_bullets,enemies):
        # 1. プレイヤーの弾 vs 敵
     for b in player_bullets[:]:
@@ -340,6 +304,26 @@ def collision_check(player,player_bullets,enemies):
     for e in enemies:
         if e.pos.distance_to(player.pos) < e.radius + player.radius:
             player.hp -= 1
+def draw_hud(player):
+    # --- 1. HPゲージの表示 ---
+    hud_x, hud_y = 20, 20
+    bar_width, bar_height = 200, 15
+    # ゲージの外枠（赤：減少した分）
+    pygame.draw.rect(screen, (100, 0, 0), (hud_x, hud_y, bar_width, bar_height))
+    # ゲージの中身（緑：現在の体力）
+    hp_ratio = max(0, player.hp / player.hp_max)
+    pygame.draw.rect(screen, (0, 255, 0), (hud_x, hud_y, bar_width * hp_ratio, bar_height))
+    # ゲージの縁
+    pygame.draw.rect(screen, (255, 255, 255), (hud_x, hud_y, bar_width, bar_height), 2)
+
+    # --- 2. 残機の表示（アイコン） ---
+    for i in range(player.lives):
+        # 小さな四角（または画像）を並べる
+        pygame.draw.rect(screen, (255, 255, 255), (hud_x + i*25, hud_y + 25, 15, 15))
+
+    # --- 3. テキストの表示 ---
+    score_text = font.render(f"LIVES: {player.lives}", True, (255, 255, 255))
+    screen.blit(score_text, (hud_x, hud_y + 45))
 def main_loop():
     
     global frame_count
@@ -347,18 +331,34 @@ def main_loop():
     player_bullets=[]
     
     enemies=[]
-    
+    enemy_barrages=[]
     barrage_types=[RandomDanmaku,OmnidirectionalDanmaku,UzumakiDanmaku,RasenDanmaku,AimedDanmaku]
 
     while (1):
         screen.fill((0, 0, 0))
 
+        
+        if player.hp <= 0:
+            player.lives -= 1
+            if player.lives >= 0:
+                player.hp = player.hp_max
+                player.pos = Vector2(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100) # 初期位置へ
+                player.invincible_timer = 180 
+            else:
+                print("GAME OVER")
+                pygame.quit()
+                sys.exit()
+
+        if player.invincible_timer > 0:
+            player.invincible_timer -= 1
+            
         for event in pygame.event.get():
             if event.type ==  QUIT:  
                 pygame.quit()      
                 sys.exit()
         if frame_count % 300 == 0:
             barrage_choice = random.choice(barrage_types)()
+            enemy_barrages.append(barrage_choice)
             enemies.append(Enemy(random.randint(50, SCREEN_WIDTH-50), -50, barrage_choice))
         
         player.update(player_bullets)
@@ -367,8 +367,13 @@ def main_loop():
             if e.update(player.pos):
                 enemies.remove(e)
 
+        for b in enemy_barrages:
+            b.update()
+            if not b.is_active and len(b.bullets) == 0:
+                enemy_barrages.remove(b)
         collision_check(player, player_bullets, enemies)
 
+        draw_hud(player)
         pygame.display.update()    
         frame_count += 1
         clock.tick(FPS)
