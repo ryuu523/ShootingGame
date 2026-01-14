@@ -17,6 +17,7 @@ clock = pygame.time.Clock()
 
 frame_count = 0
 player_shot_timer = 0 
+enemies=[]
 
 SCREEN_CENTER = SimpleNamespace(x=SCREEN_WIDTH//2, y=SCREEN_HEIGHT//2)
 
@@ -29,6 +30,26 @@ PLAYER = SimpleNamespace(
 
 VEC = SimpleNamespace(LEFT=[-1,0], RIGHT=[1,0], UP=[0,-1], DOWN=[0,1])
 
+
+#敵の設定
+class Enemy:
+    def __init__(self, x, y, hp=3):
+        self.pos = Vector2(x, y)
+        self.hp = hp
+        self.radius = 15
+        self.speed = 2
+        self.timer = 0
+
+    def update(self):
+        # 左右にゆらゆら動く例
+        self.pos.x += math.sin(frame_count * 0.05) * 2
+        self.pos.y += 0.5 # ゆっくり降りてくる
+        
+        # 描画
+        pygame.draw.circle(screen, (255, 0, 0), (int(self.pos.x), int(self.pos.y)), self.radius)
+        # HPバーの簡易表示
+        pygame.draw.rect(screen, (255, 0, 0), (self.pos.x-15, self.pos.y-25, 30, 5))
+        pygame.draw.rect(screen, (0, 255, 0), (self.pos.x-15, self.pos.y-25, 30 * (self.hp/3), 5))
 
 #弾の設定
 class Bullet:
@@ -247,7 +268,7 @@ class AimedDanmaku(Barrage):
         super().__init__()
     def update(self): 
         super().update()
-        if(frame_count%60==0):
+        if(frame_count%30==0):
             bullet = ColorBullet("purple",5)
             bullet.set_position(Vector2(PLAYER.pos.x,PLAYER.pos.y))
             direction = Vector2(SCREEN_CENTER.x - PLAYER.pos.x, SCREEN_CENTER.y - PLAYER.pos.y).normalize()
@@ -286,14 +307,29 @@ def operate(player_b):
         if player_shot_timer <= 0:
             player_b.generate()
             player_shot_timer=PLAYER.bullet.cooldown
-            
-                    
+      
 def draw_ui():
     pressed_key = pygame.key.get_pressed()
     pygame.draw.rect(screen,(255,255,255,0.5),(PLAYER.pos.x-PLAYER.width//2,PLAYER.pos.y-PLAYER.height//2,PLAYER.width,PLAYER.height))
     if(pressed_key[K_RSHIFT] or pressed_key[K_LSHIFT]):
         pygame.draw.circle(screen,(100,100,255,0.5),(PLAYER.pos.x,PLAYER.pos.y),PLAYER.radius)        
     pygame.draw.rect(screen,(0,255,0),(PLAYER.pos.x-PLAYER.width//2,PLAYER.pos.y+PLAYER.height//2,PLAYER.width-(PLAYER.width/PLAYER.hpfull)*(PLAYER.hpfull-PLAYER.hp),10))
+def collision(player_b):
+    global enemies
+    for b in player_b.bullets[:]:
+        for e in enemies[:]:
+            dist = b.pos.distance_to(e.pos)
+            if dist < b.radius + e.radius:
+                e.hp -= 1 #ダメージ量
+                if b in player_b.bullets: player_b.bullets.remove(b)
+                if e.hp <= 0:#死亡処理
+                    if e in enemies: enemies.remove(e)
+
+    for e in enemies:
+        dist = PLAYER.pos.distance_to(e.pos)
+        if dist < PLAYER.radius + e.radius:
+            PLAYER.hp -= 1 #ダメージ量
+
 def main_loop():
     
     global frame_count, player_shot_timer
@@ -313,7 +349,8 @@ def main_loop():
             if event.type ==  QUIT:  
                 pygame.quit()      
                 sys.exit()
-
+        if frame_count % 100 == 0:
+            enemies.append(Enemy(random.randint(50, SCREEN_WIDTH-50), -50))
         operate(player_b)
         if player_shot_timer > 0:
             player_shot_timer -= 1
@@ -326,6 +363,12 @@ def main_loop():
         linearScattered_b.update()
         aimed_b.update()
 
+        for e in enemies[:]:
+            e.update()
+            if e.pos.y > SCREEN_HEIGHT + 50: # 画面外に出たら削除
+                enemies.remove(e)
+
+        collision(player_b)
         draw_ui()
 
         pygame.display.update()    
