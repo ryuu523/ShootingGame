@@ -68,11 +68,15 @@ class Player:
             self.shot_timer = self.cooldown
 
     def shoot(self, player_bullets):
-        bullet = ColorBullet("white", 5)
-        bullet.set_position(Vector2(self.pos.x, self.pos.y))
-        bullet.set_velocity(Vector2(0, -self.bullet_speed))
-        player_bullets.append(bullet)
-
+        shoot_angles=[-30,0,30]
+        pressed_key = pygame.key.get_pressed()
+        if pressed_key[K_LSHIFT] or pressed_key[K_RSHIFT]:
+            shoot_angles=[-10,0,10]
+        for angle in shoot_angles:
+            bullet = ColorBullet("white", 5)
+            bullet.set_position(Vector2(self.pos.x, self.pos.y))
+            bullet.set_velocity(Vector2(0, -self.bullet_speed).rotate(angle))
+            player_bullets.append(bullet)
     def draw(self):
         #無敵時点滅
         if self.invincible_timer%4 <2:
@@ -293,7 +297,8 @@ def collision_check(player,player_bullets,enemies):
                 e.hp -= 1
                 if b in player_bullets: player_bullets.remove(b)
                 if e.hp <= 0: enemies.remove(e)
-
+    if player.invincible_timer > 0:
+        return  
     # 2. 敵の弾 vs プレイヤー
     for e in enemies:
         for eb in e.barrage.bullets[:]:
@@ -342,7 +347,6 @@ def main_loop():
             player.lives -= 1
             if player.lives >= 0:
                 player.hp = player.hp_max
-                player.pos = Vector2(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100) # 初期位置へ
                 player.invincible_timer = 180 
             else:
                 print("GAME OVER")
@@ -356,7 +360,7 @@ def main_loop():
             if event.type ==  QUIT:  
                 pygame.quit()      
                 sys.exit()
-        if frame_count % 300 == 0:
+        if frame_count % 100 == 0:
             barrage_choice = random.choice(barrage_types)()
             enemy_barrages.append(barrage_choice)
             enemies.append(Enemy(random.randint(50, SCREEN_WIDTH-50), -50, barrage_choice))
