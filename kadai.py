@@ -9,6 +9,9 @@ SCREEN_WIDTH = 600
 SCREEN_HEIGHT = 800
 FPS = 60
 
+ENEMY_BULLET_SPEED=2.5
+BULLET_RADIUS=4
+
 pygame.init()  
 screen = pygame.display.set_mode((SCREEN_WIDTH,SCREEN_HEIGHT))
 pygame.display.set_caption("game")
@@ -27,11 +30,11 @@ class Player:
         self.height = 20
         self.radius = 5  # 当たり判定用
         self.speed = 4
-        self.hp_max = 1
+        self.hp_max = 3
         self.hp = self.hp_max
         self.lives=3
         self.shot_timer = 0
-        self.cooldown = 8
+        self.cooldown = 4
         self.bullet_speed = 10
         self.is_invincible = False
         self.invincible_timer = 0
@@ -68,10 +71,10 @@ class Player:
             self.shot_timer = self.cooldown
 
     def shoot(self, player_bullets):
-        shoot_angles=[-30,0,30]
+        shoot_angles=[-15,0,15]
         pressed_key = pygame.key.get_pressed()
         if pressed_key[K_LSHIFT] or pressed_key[K_RSHIFT]:
-            shoot_angles=[-10,0,10]
+            shoot_angles=[-5,0,5]
         for angle in shoot_angles:
             bullet = ColorBullet("white", 5)
             bullet.set_position(Vector2(self.pos.x, self.pos.y))
@@ -81,8 +84,7 @@ class Player:
         #無敵時点滅
         if self.invincible_timer%4 <2:
             # プレイヤー本体
-            pygame.draw.rect(screen, (255, 255, 255), 
-                            (self.pos.x - self.width//2, self.pos.y - self.height//2, self.width, self.height))
+            pygame.draw.rect(screen, (255, 255, 255), (self.pos.x - self.width//2, self.pos.y - self.height//2, self.width, self.height))
         # 低速時の判定表示
         pressed_key = pygame.key.get_pressed()
         if pressed_key[K_LSHIFT] or pressed_key[K_RSHIFT]:
@@ -93,15 +95,16 @@ class Enemy:
         self.pos = Vector2(x, y)
         self.hp = hp
         self.radius = 15
-        self.speed = 2
+        self.speed = 0.5
         self.timer = 0
         self.barrage=barrage
+        self.spawn_frame=frame_count
 
     def update(self,target_pos):
-        # 移動と弾幕生成
-        self.pos.x += math.sin(frame_count * 0.05) * 2
-        self.pos.y += 0.5 
-        self.barrage.spawn(self.pos,target_pos)
+        relative_frame = frame_count - self.spawn_frame
+        
+        self.pos.y += self.speed 
+        self.barrage.spawn(self.pos,relative_frame,target_pos)
         
         self.draw()
         
@@ -116,18 +119,19 @@ class Enemy:
 
 #弾の設定
 class Bullet:
-    def __init__(self, pos=None, velocity=None, radius=5, color=(255,0,0)):
+    def __init__(self, pos=None, velocity=None, radius=BULLET_RADIUS, color=(255,0,0)):
         self.pos = Vector2(pos) if pos else Vector2(0,0)
         self.velocity = Vector2(velocity) if velocity else Vector2(0,0)
         self.radius = radius
         self.color = color
         self.angle = self.velocity.as_polar()[1] if self.velocity.length() > 0 else 0
-
+        self.live_frame=0
     def draw(self, screen):
         pygame.draw.circle(screen, self.color, (int(self.pos.x), int(self.pos.y)), self.radius)
     
     def update(self):
         self.pos+=self.velocity
+        self.live_frame+=1
         self.draw(screen)
         return self.collision_field()
     
@@ -145,6 +149,9 @@ class Bullet:
         self.angle = self.velocity.as_polar()[1]
 
 class ColorBullet(Bullet):
+    def __init__(self,color,radius):
+        super().__init__(color=color,radius=radius)
+class OmnidirectionalEXBullet(Bullet):
     def __init__(self,color,radius):
         super().__init__(color=color,radius=radius)
 class AngVelBullet(Bullet):
@@ -203,40 +210,62 @@ class Barrage:
         pass
     
 class RandomDanmaku(Barrage):
-    def spawn(self,start_pos,target_pos=None): 
-        if(self.is_active and frame_count%2==1):
-            bullet= ColorBullet("red",5)     
+    def spawn(self,start_pos,relative_frame,target_pos=None): 
+        if(self.is_active and relative_frame%2==1):
+            bullet= ColorBullet("red",BULLET_RADIUS)     
             bullet.set_position(Vector2(start_pos.x,start_pos.y))
             angle = random.randint(0, 360)
             vel = Vector2()
-            vel.from_polar((5, angle)) 
+            vel.from_polar((ENEMY_BULLET_SPEED, angle)) 
             bullet.set_velocity(vel)
             self.bullets.append(bullet)
         
 class OmnidirectionalDanmaku(Barrage):
-    def spawn(self,start_pos,target_pos=None): 
-        if(self.is_active and frame_count%30 ==0):
+    def spawn(self,start_pos,relative_frame,target_pos=None): 
+        if(self.is_active and relative_frame%30 ==0):
             DIV = 64
             for i in range(DIV):
-                bullet =ColorBullet("red",5)
+                bullet =ColorBullet("red",BULLET_RADIUS)
                 bullet.set_position(Vector2(start_pos.x,start_pos.y))
-                bullet.set_velocity(Vector2(1, 0).rotate(360 / DIV * i)*5)
+                bullet.set_velocity(Vector2(1, 0).rotate(360 / DIV * i)*ENEMY_BULLET_SPEED)
                 self.bullets.append(bullet)
+                
+class OmnidirectionalDanmakuEX(Barrage):
+    def spawn(self,start_pos,relative_frame,target_pos=None):
+
+        if(self.is_active and relative_frame%300 ==0):
+            DIV = 16
+            for i in range(DIV):
+                bullet =OmnidirectionalEXBullet("red",BULLET_RADIUS)
+                bullet.set_position(Vector2(start_pos.x,start_pos.y))
+                bullet.set_velocity(Vector2(1, 0).rotate(360 / DIV * i)*ENEMY_BULLET_SPEED)
+                self.bullets.append(bullet)
+        if(relative_frame%10==0):
+            new_bullets = [] 
+            for option_bullet in self.bullets:
+                if isinstance(option_bullet,OmnidirectionalEXBullet):
+                    if 0< option_bullet.live_frame <=60 and option_bullet.live_frame%10==0:
+                        for i in [-1,1]:
+                            bullet = ColorBullet("red",5)
+                            bullet.set_position(option_bullet.get_position())
+                            bullet.set_velocity(option_bullet.get_velocity().normalize().rotate(45*i)*ENEMY_BULLET_SPEED*0.5)
+                            new_bullets.append(bullet)
+            self.bullets.extend(new_bullets)
 
 class UzumakiDanmaku(Barrage):
-    def spawn(self,start_pos,target_pos=None): 
-        if(self.is_active and frame_count%3 ==0):
-            bullet =ColorBullet("red",5)
+    def spawn(self,start_pos, relative_frame, target_pos=None): 
+        if(self.is_active and relative_frame%3 ==0):
+            bullet =ColorBullet("red",BULLET_RADIUS)
             bullet.set_position(Vector2(start_pos.x,start_pos.y))
-            bullet.set_velocity(Vector2(1, 0).rotate(frame_count*3)*5)
+            bullet.set_velocity(Vector2(1, 0).rotate(relative_frame*3)*ENEMY_BULLET_SPEED)
             self.bullets.append(bullet)
 
 class RasenDanmaku(Barrage):
-    def spawn(self,start_pos,target_pos=None): 
-        super().spawn(start_pos)
-        if(self.is_active and frame_count%200==0):
+    def spawn(self,start_pos,relative_frame,target_pos=None): 
+        super().spawn(start_pos,relative_frame)
+        if(self.is_active and relative_frame%200==0):
             for i in range(2):
-                bullet = AngVelBullet("red",10)
+                bullet = AngVelBullet("red",BULLET_RADIUS*2)
                 if(i==0):
                     bullet.set_position(Vector2(start_pos.x+30,start_pos.y))
                 else:
@@ -244,8 +273,8 @@ class RasenDanmaku(Barrage):
                 bullet.set_velocity(Vector2(1, 0).rotate(180*i)*0.5)
                 bullet.set_spiral(1.5,1.01)
                 self.bullets.append(bullet)
-        
-        if(frame_count%5==0):
+
+        if(relative_frame%5==0):
             new_bullets = [] 
             for option_bullet in self.bullets:
                 if isinstance(option_bullet,AngVelBullet):
@@ -260,34 +289,34 @@ class LinearScatteredDanmaku(Barrage):
     def __init__(self):
         super().__init__()
         self.option_angle=0
-    def spawn(self,start_pos=None,target_pos=None): 
+    def spawn(self,start_pos=None,relative_frame=None,target_pos=None): 
         start_x=random.randint(0,SCREEN_WIDTH)
         end_x=random.randint(0,SCREEN_WIDTH)
         angle=math.degrees(math.atan2(SCREEN_HEIGHT,(end_x-start_x)))
-        if(frame_count%400==0):
-            bullet = ColorBullet("red",5)
+        if(relative_frame%400==0):
+            bullet = ColorBullet("red",BULLET_RADIUS)
             bullet.set_position(Vector2(start_x,0))
-            bullet.set_velocity(Vector2(1, 0).rotate(angle)*5)
+            bullet.set_velocity(Vector2(1, 0).rotate(angle)*ENEMY_BULLET_SPEED)
             self.bullets.append(bullet)
-        if(frame_count%4==0):
+        if(relative_frame%4==0):
             new_bullets = [] 
             for option_bullet in self.bullets:
-                if isinstance(option_bullet,ColorBullet) and option_bullet.color=="yellow":
-                    bullet = FirstStopBullet("red",5)
+                if isinstance(option_bullet,ColorBullet):
+                    bullet = FirstStopBullet("red",BULLET_RADIUS)
                     bullet.set_position(option_bullet.get_position())
-                    bullet.set_velocity(Vector2(1, 0).rotate(self.option_angle)*2)
+                    bullet.set_velocity(Vector2(1, 0).rotate(self.option_angle)*ENEMY_BULLET_SPEED*0.5)
                     bullet.set_stop_frame(120+frame_count)
                     new_bullets.append(bullet)
                     self.option_angle+=30
             self.bullets.extend(new_bullets)
 
 class AimedDanmaku(Barrage):
-    def spawn(self,start_pos,target_pos): 
-        if(self.is_active and frame_count%30==0):
-            bullet = ColorBullet("red",5)
+    def spawn(self,start_pos,relative_frame,target_pos): 
+        if(self.is_active and relative_frame%30==0):
+            bullet = ColorBullet("red",BULLET_RADIUS)
             bullet.set_position(Vector2(start_pos.x,start_pos.y))
             direction = Vector2(target_pos.x - start_pos.x, target_pos.y - start_pos.y).normalize()
-            bullet.set_velocity(direction * 5)
+            bullet.set_velocity(direction * ENEMY_BULLET_SPEED)
             self.bullets.append(bullet)
 def collision_check(player,player_bullets,enemies):
        # 1. プレイヤーの弾 vs 敵
@@ -337,8 +366,9 @@ def main_loop():
     
     enemies=[]
     enemy_barrages=[]
-    barrage_types=[RandomDanmaku,OmnidirectionalDanmaku,UzumakiDanmaku,RasenDanmaku,AimedDanmaku]
-
+    # barrage_types=[RandomDanmaku,OmnidirectionalDanmaku,OmnidirectionalDanmakuEX,UzumakiDanmaku,RasenDanmaku,AimedDanmaku]
+    # barrage_types=[RasenDanmaku]
+    barrage_types=[OmnidirectionalDanmakuEX]
     while (1):
         screen.fill((0, 0, 0))
 
