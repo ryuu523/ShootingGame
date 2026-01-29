@@ -1,0 +1,66 @@
+[
+    {
+        "frame": 60,
+        "enemy_type": "SineEnemy",
+        "x": 150,
+        "y": -50,
+        "barrage_type": "RandomDanmaku",
+        "hp": 3
+    },
+    {
+        "frame": 60,
+        "enemy_type": "SineEnemy",
+        "x": 450,
+        "y": -50,
+        "barrage_type": "RandomDanmaku",
+        "hp": 3
+    },
+    {
+        "frame": 180,
+        "enemy_type": "HoverEnemy",
+        "x": 300,
+        "y": -50,
+        "barrage_type": "OmnidirectionalDanmaku",
+        "hp": 10
+    },
+    {
+        "frame": 300,
+        "enemy_type": "CircleEnemy",
+        "x": 100,
+        "y": -50,
+        "barrage_type": "UzumakiDanmaku",
+        "hp": 5
+    },
+    {
+        "frame": 300,
+        "enemy_type": "CircleEnemy",
+        "x": 500,
+        "y": -50,
+        "barrage_type": "UzumakiDanmaku",
+        "hp": 5
+    },
+    {
+        "frame": 450,
+        "enemy_type": "DasherEnemy",
+        "x": 200,
+        "y": -50,
+        "barrage_type": "AimedDanmaku",
+        "hp": 2
+    },
+    {
+        "frame": 450,
+        "enemy_type": "DasherEnemy",
+        "x": 400,
+        "y": -50,
+        "barrage_type": "AimedDanmaku",
+        "hp": 2
+    },
+    {
+        "frame": 700,
+        "enemy_type": "Boss",
+        "x": 300,
+        "y": -50,
+        "barrage_type": ["RandomDanmaku", "LinearScatteredDanmaku", "OmnidirectionalDanmakuEX","OmnidirectionalDanmaku"],
+        "hp": 500
+    }
+]

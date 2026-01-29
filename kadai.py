@@ -4,6 +4,8 @@ from pygame.math import Vector2
 import sys
 import math
 import random
+import json
+
 
 SCREEN_WIDTH = 600
 SCREEN_HEIGHT = 800
@@ -15,6 +17,9 @@ BULLET_RADIUS=4
 SCENE_START = 0
 SCENE_PLAY = 1
 SCENE_GAMEOVER = 2
+SCENE_CLEAR=3
+scene=SCENE_START
+
 
 pygame.init()  
 screen = pygame.display.set_mode((SCREEN_WIDTH,SCREEN_HEIGHT))
@@ -180,9 +185,9 @@ class Boss(Enemy):
     def __init__(self, x, y, barrages):
         self.barrages = [cls() for cls in barrages]
         super().__init__(x, y, self.barrages[0], hp=50) 
-        self.max_hp = 1000
+        self.max_hp = 100#デフォルト
         self.hp=self.max_hp
-        self.radius = 40  # ボスなので大きく
+        self.radius = 40  
         self.current_pattern_index = 0
         
         # 移動用
@@ -192,7 +197,6 @@ class Boss(Enemy):
 
     def move(self):
         if self.state == "entrance":
-            # 画面上部からゆっくり降りてくる
             if self.pos.y < 100:
                 self.pos.y += 1
             else:
@@ -209,7 +213,6 @@ class Boss(Enemy):
         # HPに応じて弾幕（フェーズ）を切り替える
         self.check_phase()
         
-        # 親クラスのupdateを呼ぶが、弾幕の更新はここで行う
         relative_frame = frame_count - self.spawn_frame
         self.move()
         
@@ -454,7 +457,7 @@ def draw_text(text, font, color, x, y):
     rect = img.get_rect(center=(x, y))
     screen.blit(img, rect)
 def collision_check(player,player_bullets,enemies):
-    global total_score
+    global total_score,scene
        # 1. プレイヤーの弾 vs 敵
     for b in player_bullets[:]:
         for e in enemies[:]:
@@ -462,6 +465,8 @@ def collision_check(player,player_bullets,enemies):
                 e.hp -= 1
                 if b in player_bullets: player_bullets.remove(b)
                 if e.hp <= 0: 
+                    if isinstance(e, Boss):
+                        scene = SCENE_CLEAR
                     enemies.remove(e)
                     total_score += e.score_value
     if player.invincible_timer > 0:
@@ -498,19 +503,40 @@ def draw_hud(player):
         pygame.draw.rect(screen, (255, 255, 255), (hud_x+60 + i*25, hud_y + 45, 15, 15))
     lives_text = font.render(f"LIVES:", True, (255, 255, 255))
     screen.blit(lives_text, (hud_x, hud_y + 45))
+
+ENEMY_CLASSES = {
+    "SineEnemy": SineEnemy,
+    "HoverEnemy": HoverEnemy,
+    "DasherEnemy": DasherEnemy,
+    "CircleEnemy": CircleEnemy,
+    "Boss": Boss
+}
+
+BARRAGE_CLASSES = {
+    "RandomDanmaku": RandomDanmaku,
+    "OmnidirectionalDanmaku": OmnidirectionalDanmaku,
+    "OmnidirectionalDanmakuEX": OmnidirectionalDanmakuEX,
+    "UzumakiDanmaku": UzumakiDanmaku,
+    "RasenDanmaku": RasenDanmaku,
+    "AimedDanmaku": AimedDanmaku,
+    "LinearScatteredDanmaku": LinearScatteredDanmaku
+}
+
+#json形式のステージデータを読み取る関数
+def load_stage_data(filename):
+    with open(filename, "r", encoding="utf-8") as f:
+        return json.load(f)
+
 def main_loop():
     
-    global frame_count,total_score
-    scene=SCENE_START
+    global frame_count,total_score,scene
     player = Player()
     player_bullets=[]
     
     enemies=[]
     enemy_barrages=[]
-    barrage_types=[RandomDanmaku,OmnidirectionalDanmaku,OmnidirectionalDanmakuEX,UzumakiDanmaku,RasenDanmaku,AimedDanmaku]
-    # barrage_types=[RandomDanmaku,OmnidirectionalDanmaku,OmnidirectionalDanmakuEX,UzumakiDanmaku,RasenDanmaku,AimedDanmaku,LinearScatteredDanmaku]
-    enemy_types=[SineEnemy,HoverEnemy,DasherEnemy,CircleEnemy]
-    
+    stage_data = load_stage_data("STAGE1.json")
+    stage_idx=0
     while (1):
         screen.fill((0, 0, 0))
         for event in pygame.event.get():
@@ -529,7 +555,7 @@ def main_loop():
                         frame_count = 0
                         scene = SCENE_PLAY
                 
-                elif scene == SCENE_GAMEOVER:
+                elif scene == SCENE_GAMEOVER or scene == SCENE_CLEAR:
                     if event.key == K_SPACE: 
                         scene = SCENE_START
         if scene == SCENE_START:
@@ -550,16 +576,34 @@ def main_loop():
             if player.invincible_timer > 0:
                 player.invincible_timer -= 1
                 
-            if frame_count %200==0:
+            while stage_idx < len(stage_data) and frame_count >= stage_data[stage_idx]["frame"]:
+                spawn_info = stage_data[stage_idx]
+                e_class = ENEMY_CLASSES[spawn_info["enemy_type"]]
+                ex, ey = spawn_info["x"], spawn_info["y"]
+                hp = spawn_info["hp"]
                 
-                barrage_choice = random.choice(barrage_types)()
-                enemy_barrages.append(barrage_choice)
-                enemy_choice=random.choice(enemy_types)
+                # 弾幕の処理
+                raw_barrage = spawn_info["barrage_type"]
                 
-                # boss = Boss(SCREEN_WIDTH//2, -50, barrage_types)
-                # enemies.append(boss)
+                if spawn_info["enemy_type"] == "Boss":
+                    if(len(enemies)==0):
+                        boss_barrage_classes = [BARRAGE_CLASSES[name] for name in raw_barrage]
+                        new_enemy = Boss(ex, ey, boss_barrage_classes)
+                        new_enemy.max_hp = hp
+                        new_enemy.hp = hp
+                    else:
+                        break
+                        
+                else:
+                    b_class = BARRAGE_CLASSES[raw_barrage]
+                    b_instance = b_class()
+                    enemy_barrages.append(b_instance) # 弾幕リストに追加（本体消滅後も更新するため）
+                    new_enemy = e_class(ex, ey, b_instance, hp=hp)
                 
-                enemies.append(enemy_choice(random.randint(50, SCREEN_WIDTH-50), -50, barrage_choice))
+                enemies.append(new_enemy)
+                stage_idx += 1  # 次のデータへ
+                
+                
             
             player.update(player_bullets)
             player_bullets = [b for b in player_bullets if not b.update()]
@@ -580,7 +624,10 @@ def main_loop():
             draw_text("GAME OVER", font_large, (255, 50, 50), SCREEN_WIDTH//2, SCREEN_HEIGHT//3)
             draw_text(f"FINAL SCORE: {str(total_score).zfill(8)}", font, (255, 255, 255), SCREEN_WIDTH//2, SCREEN_HEIGHT//2)
             draw_text("Press 'SPACE' to Return to Title", font, (200, 200, 200), SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 100)
-        
+        elif scene == SCENE_CLEAR:
+            draw_text("STAGE CLEAR !!", font_large, (50, 255, 50), SCREEN_WIDTH//2, SCREEN_HEIGHT//3)
+            draw_text(f"FINAL SCORE: {str(total_score).zfill(8)}", font, (255, 255, 255), SCREEN_WIDTH//2, SCREEN_HEIGHT//2)
+            draw_text("Press 'SPACE' to Return to Title", font, (200, 200, 200), SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 100)
         pygame.display.update()    
         clock.tick(FPS)
 
